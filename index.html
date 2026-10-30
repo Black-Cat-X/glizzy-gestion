@@ -1489,7 +1489,8 @@ if(typeof module !== 'undefined') module.exports = GlizzyQR;
     const btn = document.getElementById('btn-imprevisto');
     btn.disabled = true; btn.textContent = 'Guardando…';
     ocultarError('error-fin');
-    const fecha = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+    const fecha = document.getElementById('fin-fin').value
+               || new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
     const { error } = await db.from('gastos').insert(
       { fecha, categoria: 'imprevisto', concepto, valor }
     );
