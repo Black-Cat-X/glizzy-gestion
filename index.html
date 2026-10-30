@@ -98,7 +98,8 @@
   input[type="email"],
   input[type="password"],
   input[type="number"],
-  input[type="text"] {
+  input[type="text"],
+  input[type="date"] {
     width: 100%;
     background: #14100C;
     border: 1px solid #40342376;
@@ -113,7 +114,9 @@
   input[type="email"]:focus,
   input[type="password"]:focus,
   input[type="number"]:focus,
-  input[type="text"]:focus  { outline: 1px solid var(--mustard); }
+  input[type="text"]:focus,
+  input[type="date"]:focus  { outline: 1px solid var(--mustard); }
+  input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.7); cursor: pointer; }
   input::placeholder { color: #5a4e3e; }
 
   textarea {
@@ -200,6 +203,67 @@
     display: block;
     margin-bottom: 4px;
   }
+
+  /* ---- FINANZAS ---- */
+  .fin-stat {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 7px 0;
+    font-size: 13px;
+    color: var(--ink-soft);
+    border-bottom: 1px solid #2e2318;
+  }
+  .fin-stat:last-of-type { border-bottom: none; }
+  .fin-num { color: var(--paper); font-weight: 700; }
+  .fin-sub { font-size: 12px; }
+  .fin-sub span:first-child { padding-left: 10px; }
+  .fin-sub .fin-num { color: var(--ink-soft); font-weight: 400; }
+
+  .fin-total-lbl {
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    text-align: center;
+    margin-top: 14px;
+  }
+  .fin-saldo {
+    font-size: 32px;
+    font-weight: 700;
+    text-align: center;
+    margin-top: 4px;
+    color: var(--paper);
+    transition: color .2s;
+  }
+  .fin-saldo.pos { color: #6fcf97; }
+  .fin-saldo.neg { color: #eb5757; }
+
+  /* Historial quincenas */
+  .q-row {
+    padding: 10px 0;
+    border-bottom: 1px solid #2e2318;
+  }
+  .q-row:last-child { border-bottom: none; }
+  .q-head {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    margin-bottom: 5px;
+  }
+  .q-period { color: var(--ink-soft); }
+  .q-ok  { color: #6fcf97; font-weight: 700; }
+  .q-bad { color: #eb5757; font-weight: 700; }
+  .q-track {
+    width: 100%;
+    height: 10px;
+    background: #1a1108;
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .q-bar-pos { height: 10px; background: #2d5a3d; border-radius: 3px; }
+  .q-bar-neg { height: 10px; background: #5a2d1a; border-radius: 3px; }
+
   /* ---- BUTTONS ---- */
   button {
     font-family: 'Space Mono', monospace;
@@ -826,15 +890,93 @@
 
     <!-- ========== TAB: FINANZAS ========== -->
     <section id="tab-finanzas" class="tab-contenido" hidden role="tabpanel">
-      <div class="pronto">
-        <div class="pronto-icono">💰</div>
-        <div class="pronto-titulo">Finanzas</div>
-        <div class="pronto-desc">
-          Quincenas, gastos fijos, bono del empleado,<br>
-          imprevistos y gráfico de ingresos vs gastos.<br><br>
-          Disponible en la <strong>Fase 4</strong>.
+
+      <!-- Período -->
+      <div class="panel">
+        <label>Quincena</label>
+        <div class="row">
+          <div class="form-row" style="flex:1">
+            <label>Desde</label>
+            <input type="date" id="fin-inicio">
+          </div>
+          <div class="form-row" style="flex:1">
+            <label>Hasta</label>
+            <input type="date" id="fin-fin">
+          </div>
         </div>
+        <button id="btn-calcular" class="btn-secundario" style="width:100%">Calcular</button>
       </div>
+
+      <!-- Resumen -->
+      <div class="panel" id="resumen-panel" hidden>
+        <label>Resumen del período</label>
+
+        <div class="fin-stat">
+          <span>Días trabajados</span>
+          <span class="fin-num" id="fin-dias">—</span>
+        </div>
+        <div class="fin-stat">
+          <span>Unidades vendidas</span>
+          <span class="fin-num" id="fin-unidades">—</span>
+        </div>
+
+        <div class="fin-stat" style="margin-top:6px">
+          <span>Ingresos</span>
+          <span class="fin-num" id="fin-ingresos">$0</span>
+        </div>
+        <div class="fin-stat fin-sub">
+          <span>— Inventario</span>
+          <span class="fin-num" id="fin-inv">$0</span>
+        </div>
+        <div class="fin-stat fin-sub">
+          <span>— Arriendo (½ mes)</span>
+          <span class="fin-num" id="fin-arriendo">$0</span>
+        </div>
+        <div class="fin-stat fin-sub">
+          <span>— Base empleado</span>
+          <span class="fin-num" id="fin-base">$0</span>
+        </div>
+        <div class="fin-stat fin-sub">
+          <span>— Bono empleado</span>
+          <span class="fin-num" id="fin-bono">$0</span>
+        </div>
+        <div class="fin-stat fin-sub" id="fin-imp-row" hidden>
+          <span>— Imprevistos</span>
+          <span class="fin-num" id="fin-imp">$0</span>
+        </div>
+
+        <div class="fin-total-lbl">Saldo estimado</div>
+        <div class="fin-saldo" id="fin-saldo">$0</div>
+
+        <button id="btn-cerrar" class="btn-primario"
+                style="width:100%;margin-top:18px">Cerrar quincena</button>
+        <div id="fin-ya-cerrada" hidden
+             style="text-align:center;color:#6fcf97;font-size:12px;
+                    letter-spacing:.5px;margin-top:10px">✓ Esta quincena ya fue cerrada</div>
+      </div>
+
+      <!-- Imprevisto -->
+      <div class="panel">
+        <label>Registrar imprevisto</label>
+        <div class="form-row">
+          <label>Concepto</label>
+          <input type="text" id="imp-concepto" placeholder="Ej: Reparación estufa">
+        </div>
+        <div class="form-row">
+          <label>Valor ($)</label>
+          <input type="number" id="imp-valor" min="1" step="1" placeholder="0">
+        </div>
+        <button id="btn-imprevisto" class="btn-secundario" style="width:100%">Registrar imprevisto</button>
+      </div>
+
+      <!-- Historial quincenas -->
+      <div class="panel" id="hist-q-panel" hidden>
+        <label>Quincenas cerradas</label>
+        <div id="hist-q-lista"></div>
+      </div>
+
+      <div class="error-box" id="error-fin"></div>
+
     </section>
 
     <!-- ========== TAB: EXPORTAR ========== -->
@@ -1028,6 +1170,7 @@ if(typeof module !== 'undefined') module.exports = GlizzyQR;
       activarTab(btn.dataset.tab);
       if(btn.dataset.tab === 'venta')     cargarHistorial();
       if(btn.dataset.tab === 'inventario') cargarStock();
+      if(btn.dataset.tab === 'finanzas')   cargarFinanzas();
     });
   });
 
@@ -1051,6 +1194,179 @@ if(typeof module !== 'undefined') module.exports = GlizzyQR;
   }
 
 
+
+
+  /* ============================================================
+     FASE 4: FINANZAS
+     ============================================================ */
+  function quinceActual(){
+    const hoy   = new Date(new Date().toLocaleDateString('en-CA',
+                    { timeZone: 'America/Bogota' }));
+    const y = hoy.getFullYear(), m = hoy.getMonth(), d = hoy.getDate();
+    const ini = d <= 15
+      ? new Date(y, m, 1)
+      : new Date(y, m, 16);
+    const fin = d <= 15
+      ? new Date(y, m, 15)
+      : new Date(y, m + 1, 0);
+    const fmt = x => x.toLocaleDateString('en-CA');
+    return { inicio: fmt(ini), fin: fmt(fin) };
+  }
+
+  async function cargarFinanzas(){
+    // Poner fechas por defecto si están vacías
+    const elIni = document.getElementById('fin-inicio');
+    const elFin = document.getElementById('fin-fin');
+    if(!elIni.value){
+      const q = quinceActual();
+      elIni.value = q.inicio;
+      elFin.value = q.fin;
+    }
+    await Promise.all([ calcularResumen(), cargarHistorialQuincenas() ]);
+  }
+
+  async function calcularResumen(){
+    const inicio = document.getElementById('fin-inicio').value;
+    const fin    = document.getElementById('fin-fin').value;
+    if(!inicio || !fin || inicio > fin) return;
+
+    const panel = document.getElementById('resumen-panel');
+    ocultarError('error-fin');
+
+    try {
+      // Datos en paralelo
+      const [cfgRes, ventasRes, gastosRes, cerradaRes] = await Promise.all([
+        db.from('config_historial')
+          .select('clave,valor,vigente_desde')
+          .lte('vigente_desde', fin)
+          .order('vigente_desde', { ascending: false }),
+        db.from('reportes_venta')
+          .select('total,perros,tostilocos,dorilokos')
+          .gte('fecha', inicio).lte('fecha', fin),
+        db.from('gastos')
+          .select('categoria,valor')
+          .gte('fecha', inicio).lte('fecha', fin),
+        db.from('quincenas')
+          .select('saldo').eq('inicio', inicio).eq('fin', fin).maybeSingle()
+      ]);
+
+      // Config
+      const cfg = {};
+      cfgRes.data?.forEach(r => { if(!(r.clave in cfg)) cfg[r.clave] = +r.valor; });
+      const arriendo = (cfg.arriendo_mensual    || 700000) / 2;
+      const base     =  cfg.base_empleado_quincena || 400000;
+      const bonoUnit =  cfg.bono_por_unidad     || 1000;
+
+      // Ventas
+      const ventas    = ventasRes.data || [];
+      const ingresos  = ventas.reduce((s, r) => s + r.total, 0);
+      const unidades  = ventas.reduce((s, r) => s + r.perros + r.tostilocos + r.dorilokos, 0);
+      const dias      = ventas.length;
+
+      // Gastos ya en DB para el período
+      const gastos = gastosRes.data || [];
+      const gasInv = gastos.filter(g => g.categoria === 'inventario').reduce((s,g) => s+g.valor, 0);
+      const gasImp = gastos.filter(g => g.categoria === 'imprevisto').reduce((s,g) => s+g.valor, 0);
+
+      const bono   = unidades * bonoUnit;
+      const saldo  = ingresos - gasInv - gasImp - arriendo - base - bono;
+
+      // Render
+      document.getElementById('fin-dias').textContent      = dias;
+      document.getElementById('fin-unidades').textContent  = unidades;
+      document.getElementById('fin-ingresos').textContent  = fmt(ingresos);
+      document.getElementById('fin-inv').textContent       = fmt(gasInv);
+      document.getElementById('fin-arriendo').textContent  = fmt(arriendo);
+      document.getElementById('fin-base').textContent      = fmt(base);
+      document.getElementById('fin-bono').textContent      = fmt(bono) +
+        ' (' + unidades + ' × ' + fmt(bonoUnit) + ')';
+      const impRow = document.getElementById('fin-imp-row');
+      impRow.hidden = gasImp === 0;
+      if(gasImp) document.getElementById('fin-imp').textContent = fmt(gasImp);
+
+      const elSaldo = document.getElementById('fin-saldo');
+      elSaldo.textContent = fmt(saldo);
+      elSaldo.className = 'fin-saldo ' + (saldo >= 0 ? 'pos' : 'neg');
+
+      // Estado del botón cerrar
+      const cerrada = !!cerradaRes.data;
+      document.getElementById('btn-cerrar').disabled = cerrada;
+      document.getElementById('fin-ya-cerrada').hidden = !cerrada;
+
+      panel.hidden = false;
+    } catch(e){
+      mostrarError('error-fin', 'Error calculando el resumen: ' + (e.message || ''));
+    }
+  }
+
+  async function cerrarQuincena(){
+    const inicio = document.getElementById('fin-inicio').value;
+    const fin    = document.getElementById('fin-fin').value;
+    if(!inicio || !fin) return;
+    const btn = document.getElementById('btn-cerrar');
+    btn.disabled = true; btn.textContent = 'Cerrando…';
+    ocultarError('error-fin');
+    const { data, error } = await db.rpc('cerrar_quincena',
+      { p_inicio: inicio, p_fin: fin });
+    btn.textContent = 'Cerrar quincena';
+    if(error){
+      btn.disabled = false;
+      mostrarError('error-fin', 'Error: ' + error.message);
+      return;
+    }
+    document.getElementById('fin-ya-cerrada').hidden = false;
+    await Promise.all([ calcularResumen(), cargarHistorialQuincenas() ]);
+  }
+
+  async function registrarImprevisto(){
+    const concepto = document.getElementById('imp-concepto').value.trim();
+    const valor    = parseInt(document.getElementById('imp-valor').value);
+    if(!concepto || !(valor > 0)){
+      mostrarError('error-fin', 'Ingresa concepto y valor del imprevisto.');
+      return;
+    }
+    const btn = document.getElementById('btn-imprevisto');
+    btn.disabled = true; btn.textContent = 'Guardando…';
+    ocultarError('error-fin');
+    const fecha = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+    const { error } = await db.from('gastos').insert(
+      { fecha, categoria: 'imprevisto', concepto, valor }
+    );
+    btn.disabled = false; btn.textContent = 'Registrar imprevisto';
+    if(error){ mostrarError('error-fin', 'Error: ' + error.message); return; }
+    document.getElementById('imp-concepto').value = '';
+    document.getElementById('imp-valor').value    = '';
+    calcularResumen();
+  }
+
+  async function cargarHistorialQuincenas(){
+    const { data } = await db.from('quincenas')
+      .select('inicio,fin,saldo')
+      .order('inicio', { ascending: false })
+      .limit(8);
+    const panel = document.getElementById('hist-q-panel');
+    if(!data?.length){ panel.hidden = true; return; }
+    const maxAbs = Math.max(...data.map(q => Math.abs(q.saldo)), 1);
+    document.getElementById('hist-q-lista').innerHTML = data.map(q => {
+      const pct   = Math.round(Math.abs(q.saldo) / maxAbs * 100);
+      const pos   = q.saldo >= 0;
+      const label = q.inicio.slice(5).replace('-','/') + ' – ' + q.fin.slice(5).replace('-','/');
+      return `<div class="q-row">
+        <div class="q-head">
+          <span class="q-period">${label}</span>
+          <span class="${pos ? 'q-ok' : 'q-bad'}">${fmt(q.saldo)}</span>
+        </div>
+        <div class="q-track">
+          <div class="${pos ? 'q-bar-pos' : 'q-bar-neg'}" style="width:${pct}%"></div>
+        </div>
+      </div>`;
+    }).join('');
+    panel.hidden = false;
+  }
+
+  document.getElementById('btn-calcular').addEventListener('click',  calcularResumen);
+  document.getElementById('btn-cerrar').addEventListener('click',    cerrarQuincena);
+  document.getElementById('btn-imprevisto').addEventListener('click', registrarImprevisto);
 
   /* ============================================================
      FASE 3: INVENTARIO
