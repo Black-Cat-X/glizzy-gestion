@@ -96,7 +96,9 @@
 
   /* ---- INPUTS ---- */
   input[type="email"],
-  input[type="password"] {
+  input[type="password"],
+  input[type="number"],
+  input[type="text"] {
     width: 100%;
     background: #14100C;
     border: 1px solid #40342376;
@@ -109,7 +111,9 @@
     margin-bottom: 4px;
   }
   input[type="email"]:focus,
-  input[type="password"]:focus { outline: 1px solid var(--mustard); }
+  input[type="password"]:focus,
+  input[type="number"]:focus,
+  input[type="text"]:focus  { outline: 1px solid var(--mustard); }
   input::placeholder { color: #5a4e3e; }
 
   textarea {
@@ -127,6 +131,75 @@
   }
   textarea:focus { outline: 1px solid var(--mustard); }
 
+
+  /* ---- SELECT ---- */
+  select {
+    width: 100%;
+    background: #14100C;
+    border: 1px solid #40342376;
+    border-radius: 6px;
+    color: var(--paper);
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+    appearance: none;
+    -webkit-appearance: none;
+    cursor: pointer;
+  }
+  select:focus { outline: 1px solid var(--mustard); }
+
+  /* ---- INVENTARIO ---- */
+  .inv-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  .inv-header label { margin-bottom: 0; }
+  .btn-icono {
+    background: none;
+    border: 1px solid #3a2f22;
+    color: var(--ink-soft);
+    font-size: 16px;
+    font-weight: 400;
+    padding: 3px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    letter-spacing: 0;
+    text-transform: none;
+  }
+  .btn-icono:hover { color: var(--paper); }
+
+  .stock-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 0;
+    border-bottom: 1px solid #2e2318;
+    font-size: 13px;
+  }
+  .stock-row:last-child { border-bottom: none; }
+  .stock-ind    { font-size: 9px; }
+  .stock-ok     { color: #6fcf97; }
+  .stock-medio  { color: #e2a03f; }
+  .stock-bajo   { color: #eb5757; }
+  .stock-nombre { flex: 1; color: var(--paper); }
+  .stock-cant   { color: var(--paper); font-weight: 700; min-width: 36px; text-align: right; }
+  .stock-unidad { color: var(--ink-soft); font-size: 11px; min-width: 50px; }
+
+  .alerta-panel { border-color: #7a4a1a !important; background: #261508 !important; }
+  .alerta-panel .inv-header label, .alerta-panel > label { color: #e2a03f !important; }
+
+  .form-row { margin-bottom: 10px; }
+  .form-row label {
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    display: block;
+    margin-bottom: 4px;
+  }
   /* ---- BUTTONS ---- */
   button {
     font-family: 'Space Mono', monospace;
@@ -685,15 +758,70 @@
 
     <!-- ========== TAB: INVENTARIO ========== -->
     <section id="tab-inventario" class="tab-contenido" hidden role="tabpanel">
-      <div class="pronto">
-        <div class="pronto-icono">📦</div>
-        <div class="pronto-titulo">Inventario</div>
-        <div class="pronto-desc">
-          Stock en tiempo real, registro de compras,<br>
-          ajustes manuales y lista de compras sugerida.<br><br>
-          Disponible en la <strong>Fase 3</strong>.
+
+      <!-- Stock actual -->
+      <div class="panel">
+        <div class="inv-header">
+          <label>Stock actual</label>
+          <button class="btn-icono" id="btn-refrescar">↻</button>
         </div>
+        <div id="stock-lista"><span style="color:#9c8f79;font-size:13px">Cargando…</span></div>
       </div>
+
+      <!-- Compras sugeridas -->
+      <div class="panel alerta-panel" id="lista-sugerida-panel" hidden>
+        <div class="inv-header">
+          <label>⚠ Compras sugeridas</label>
+        </div>
+        <div id="lista-sugerida"></div>
+      </div>
+
+      <!-- Registrar compra -->
+      <div class="panel">
+        <label>Registrar compra</label>
+        <div class="form-row">
+          <label>Insumo</label>
+          <select id="compra-insumo"><option value="">— Selecciona —</option></select>
+        </div>
+        <div class="row">
+          <div class="form-row" style="flex:1">
+            <label>Cantidad</label>
+            <input type="number" id="compra-cantidad" min="0.01" step="0.01" placeholder="0">
+          </div>
+          <div class="form-row" style="flex:1">
+            <label>Valor total ($)</label>
+            <input type="number" id="compra-valor" min="1" step="1" placeholder="0">
+          </div>
+        </div>
+        <button id="btn-compra" class="btn-primario" style="width:100%;margin-top:4px">Registrar compra</button>
+      </div>
+
+      <!-- Ajuste manual -->
+      <div class="panel">
+        <label>Ajuste manual</label>
+        <div class="form-row">
+          <label>Insumo</label>
+          <select id="ajuste-insumo"><option value="">— Selecciona —</option></select>
+        </div>
+        <div class="row">
+          <div class="form-row" style="flex:1">
+            <label>Tipo</label>
+            <select id="ajuste-tipo" style="margin-bottom:0">
+              <option value="agregar">Agregar</option>
+              <option value="perdida">Pérdida</option>
+              <option value="gasto">Gasto</option>
+            </select>
+          </div>
+          <div class="form-row" style="flex:1">
+            <label>Cantidad</label>
+            <input type="number" id="ajuste-cantidad" min="0.01" step="0.01" placeholder="0">
+          </div>
+        </div>
+        <button id="btn-ajuste" class="btn-secundario" style="width:100%;margin-top:4px">Registrar ajuste</button>
+      </div>
+
+      <div class="error-box" id="error-inv"></div>
+
     </section>
 
     <!-- ========== TAB: FINANZAS ========== -->
@@ -898,7 +1026,8 @@ if(typeof module !== 'undefined') module.exports = GlizzyQR;
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       activarTab(btn.dataset.tab);
-      if(btn.dataset.tab === 'venta') cargarHistorial();
+      if(btn.dataset.tab === 'venta')     cargarHistorial();
+      if(btn.dataset.tab === 'inventario') cargarStock();
     });
   });
 
@@ -921,6 +1050,117 @@ if(typeof module !== 'undefined') module.exports = GlizzyQR;
     el.style.display = 'none';
   }
 
+
+
+  /* ============================================================
+     FASE 3: INVENTARIO
+     ============================================================ */
+  let stockData = [];
+
+  async function cargarStock(){
+    const lista   = document.getElementById('stock-lista');
+    const panel   = document.getElementById('lista-sugerida-panel');
+    lista.innerHTML = '<span style="color:#9c8f79;font-size:13px">Cargando…</span>';
+    try {
+      const { data, error } = await db
+        .from('stock_actual')
+        .select('id,nombre,unidad,minimo_semana_baja,stock');
+      if(error) throw error;
+      stockData = data || [];
+
+      // Render stock
+      lista.innerHTML = stockData.length
+        ? stockData.map(s => {
+            const v  = parseFloat(s.stock);
+            const mn = s.minimo_semana_baja;
+            const cls = mn > 0 && v < mn        ? 'stock-bajo'
+                      : mn > 0 && v < mn * 1.5  ? 'stock-medio'
+                      : 'stock-ok';
+            return `<div class="stock-row">
+              <span class="stock-ind ${cls}">●</span>
+              <span class="stock-nombre">${esc(s.nombre)}</span>
+              <span class="stock-cant">${v % 1 === 0 ? v : v.toFixed(2)}</span>
+              <span class="stock-unidad">${esc(s.unidad)}</span>
+            </div>`;
+          }).join('')
+        : '<span style="color:#9c8f79;font-size:13px">Sin datos.</span>';
+
+      // Render sugerida
+      const bajos = stockData.filter(s => s.minimo_semana_baja > 0 && parseFloat(s.stock) < s.minimo_semana_baja);
+      if(bajos.length){
+        document.getElementById('lista-sugerida').innerHTML = bajos.map(s =>
+          `<div class="stock-row">
+            <span class="stock-ind stock-bajo">●</span>
+            <span class="stock-nombre">${esc(s.nombre)}</span>
+            <span class="stock-cant">${parseFloat(s.stock)} / ${s.minimo_semana_baja}</span>
+            <span class="stock-unidad">${esc(s.unidad)}</span>
+          </div>`
+        ).join('');
+        panel.hidden = false;
+      } else {
+        panel.hidden = true;
+      }
+
+      // Poblar selects
+      const opts = '<option value="">— Selecciona —</option>' +
+        stockData.map(s => `<option value="${s.id}">${esc(s.nombre)}</option>`).join('');
+      document.getElementById('compra-insumo').innerHTML = opts;
+      document.getElementById('ajuste-insumo').innerHTML = opts;
+    } catch(e){
+      lista.innerHTML = `<span style="color:#f1b7ab;font-size:12px">Error: ${esc(e.message || '')}</span>`;
+    }
+  }
+
+  async function registrarCompra(){
+    const insumoId = parseInt(document.getElementById('compra-insumo').value);
+    const cantidad = parseFloat(document.getElementById('compra-cantidad').value);
+    const valor    = parseFloat(document.getElementById('compra-valor').value);
+    if(!insumoId || !(cantidad > 0) || !(valor > 0)){
+      mostrarError('error-inv', 'Completa: insumo, cantidad y valor total.');
+      return;
+    }
+    const btn = document.getElementById('btn-compra');
+    btn.disabled = true; btn.textContent = 'Guardando…';
+    ocultarError('error-inv');
+    const fecha = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+    const { error } = await db.rpc('registrar_compra', {
+      p_insumo_id: insumoId, p_cantidad: cantidad,
+      p_valor_total: valor,  p_fecha: fecha
+    });
+    btn.disabled = false; btn.textContent = 'Registrar compra';
+    if(error){ mostrarError('error-inv', 'Error: ' + error.message); return; }
+    document.getElementById('compra-cantidad').value = '';
+    document.getElementById('compra-valor').value    = '';
+    document.getElementById('compra-insumo').value   = '';
+    cargarStock();
+  }
+
+  async function registrarAjuste(){
+    const insumoId = parseInt(document.getElementById('ajuste-insumo').value);
+    const tipo     = document.getElementById('ajuste-tipo').value;
+    const cantRaw  = parseFloat(document.getElementById('ajuste-cantidad').value);
+    if(!insumoId || !(cantRaw > 0)){
+      mostrarError('error-inv', 'Selecciona un insumo e ingresa una cantidad válida.');
+      return;
+    }
+    const cantidad = tipo === 'agregar' ? cantRaw : -cantRaw;
+    const btn = document.getElementById('btn-ajuste');
+    btn.disabled = true; btn.textContent = 'Guardando…';
+    ocultarError('error-inv');
+    const fecha = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+    const { error } = await db.from('movimientos_stock').insert({
+      fecha, insumo_id: insumoId, tipo, cantidad
+    });
+    btn.disabled = false; btn.textContent = 'Registrar ajuste';
+    if(error){ mostrarError('error-inv', 'Error: ' + error.message); return; }
+    document.getElementById('ajuste-cantidad').value = '';
+    document.getElementById('ajuste-insumo').value   = '';
+    cargarStock();
+  }
+
+  document.getElementById('btn-refrescar').addEventListener('click', cargarStock);
+  document.getElementById('btn-compra').addEventListener('click', registrarCompra);
+  document.getElementById('btn-ajuste').addEventListener('click', registrarAjuste);
 
   /* ============================================================
      FASE 2: GUARDAR VENTA E HISTORIAL
