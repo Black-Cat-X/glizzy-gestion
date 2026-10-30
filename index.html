@@ -788,12 +788,15 @@ if(typeof module !== 'undefined') module.exports = GlizzyQR;
   /* ============================================================
      AUTENTICACIÓN
      ============================================================ */
-  db.auth.onAuthStateChange((_evento, sesion) => {
-    if(sesion){
-      mostrarApp(sesion.user);
-    } else {
-      mostrarLogin();
-    }
+  // Arranque: verificar sesión guardada
+  db.auth.getSession().then(({ data: { session } }) => {
+    if(session){ mostrarApp(session.user); } else { mostrarLogin(); }
+  });
+
+  // Cambios posteriores: solo reaccionar a login/logout explícitos
+  db.auth.onAuthStateChange((evento, sesion) => {
+    if(evento === 'SIGNED_IN' && sesion){ mostrarApp(sesion.user); }
+    else if(evento === 'SIGNED_OUT'){     mostrarLogin(); }
   });
 
   function mostrarLogin(){
