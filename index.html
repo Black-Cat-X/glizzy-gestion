@@ -981,15 +981,47 @@
 
     <!-- ========== TAB: EXPORTAR ========== -->
     <section id="tab-exportar" class="tab-contenido" hidden role="tabpanel">
-      <div class="pronto">
-        <div class="pronto-icono">📤</div>
-        <div class="pronto-titulo">Exportar</div>
-        <div class="pronto-desc">
-          Descarga el historial completo en JSON<br>
-          resumido por día para analizar con IA.<br><br>
-          Disponible en la <strong>Fase 5</strong>.
+
+      <div class="panel">
+        <label>Exportar datos</label>
+        <p style="color:var(--ink-soft);font-size:13px;line-height:1.6;margin:0 0 16px">
+          Descarga el historial completo en JSON: ventas por día,
+          gastos, quincenas y configuración. Listo para analizar con IA.
+        </p>
+
+        <div class="form-row">
+          <label>Rango</label>
+          <select id="exp-rango">
+            <option value="todo">Todo el historial</option>
+            <option value="quincena">Quincena actual</option>
+            <option value="custom">Fechas personalizadas</option>
+          </select>
         </div>
+
+        <div id="exp-custom" hidden>
+          <div class="row" style="margin-top:0">
+            <div class="form-row" style="flex:1">
+              <label>Desde</label>
+              <input type="date" id="exp-inicio">
+            </div>
+            <div class="form-row" style="flex:1">
+              <label>Hasta</label>
+              <input type="date" id="exp-fin">
+            </div>
+          </div>
+        </div>
+
+        <button id="btn-exportar" class="btn-primario" style="width:100%">
+          Descargar JSON
+        </button>
+
+        <div id="exp-ok" hidden
+             style="margin-top:12px;color:#6fcf97;font-size:12px;
+                    text-align:center;letter-spacing:.5px"></div>
       </div>
+
+      <div class="error-box" id="error-exp"></div>
+
     </section>
 
   </div><!-- /#app -->
@@ -1195,6 +1227,135 @@ if(typeof module !== 'undefined') module.exports = GlizzyQR;
 
 
 
+
+
+  /* ============================================================
+     FASE 5: EXPORTAR
+     ============================================================ */
+  document.getElementById('exp-rango').addEventListener('change', function(){
+    document.getElementById('exp-custom').hidden = this.value !== 'custom';
+  });
+
+  async function exportarJSON(){
+    const rango = document.getElementById('exp-rango').value;
+    let inicio = null, fin = null;
+
+    if(rango === 'quincena'){
+      const q = quinceActual();
+      inicio = q.inicio; fin = q.fin;
+    } else if(rango === 'custom'){
+      inicio = document.getElementById('exp-inicio').value;
+      fin    = document.getElementById('exp-fin').value;
+      if(!inicio || !fin || inicio > fin){
+        mostrarError('error-exp', 'Selecciona un rango de fechas válido.');
+        return;
+      }
+    }
+
+    const btn = document.getElementById('btn-exportar');
+    btn.disabled = true; btn.textContent = 'Generando…';
+    ocultarError('error-exp');
+    document.getElementById('exp-ok').hidden = true;
+
+    try {
+      // Construir queries (con o sin filtro de fechas)
+      const rng = q => inicio ? q.gte('fecha', inicio).lte('fecha', fin) : q;
+      const rngQ = q => inicio ? q.gte('fecha_reporte', inicio).lte('fecha_reporte', fin) : q;
+
+      const [r1, r2, r3, r4, r5] = await Promise.all([
+        rng(db.from('reportes_venta')
+          .select('fecha,vendedor,firma,num_ventas,perros,combos,gaseosas_sueltas,adic_ca,adic_ce,adic_po,tostilocos,dorilokos,efectivo,transferencia,total,cuadra,created_at')
+          .order('fecha', { ascending: true })),
+        rngQ(db.from('ventas_detalle')
+          .select('fecha_reporte,hora,total,metodo,items')
+          .order('fecha_reporte', { ascending: true })),
+        rng(db.from('gastos')
+          .select('fecha,categoria,concepto,valor')
+          .order('fecha', { ascending: true })),
+        (inicio
+          ? db.from('quincenas').select('inicio,fin,saldo')
+              .gte('inicio', inicio).lte('fin', fin)
+              .order('inicio', { ascending: true })
+          : db.from('quincenas').select('inicio,fin,saldo')
+              .order('inicio', { ascending: true })),
+        db.from('config_historial')
+          .select('clave,valor,vigente_desde')
+          .order('vigente_desde', { ascending: true })
+      ]);
+
+      if(r1.error) throw r1.error;
+      if(r2.error) throw r2.error;
+
+      // Agrupar detalle por fecha
+      const detPorFecha = {};
+      (r2.data || []).forEach(d => {
+        (detPorFecha[d.fecha_reporte] ||= []).push({
+          hora:   d.hora.slice(0,2) + ':' + d.hora.slice(2,4),
+          total:  d.total,
+          metodo: d.metodo === 0 ? 'efectivo' : 'transferencia',
+          items:  d.items
+        });
+      });
+
+      const ahora = new Date().toLocaleString('es-CO',
+        { timeZone: 'America/Bogota', dateStyle: 'short', timeStyle: 'short' });
+
+      const exportData = {
+        exportado: ahora,
+        rango:     inicio ? (inicio + ' al ' + fin) : 'todo el historial',
+        reportes:  (r1.data || []).map(r => ({
+          fecha:            r.fecha,
+          vendedor:         r.vendedor,
+          firma:            r.firma,
+          num_ventas:       r.num_ventas,
+          perros:           r.perros,
+          combos:           r.combos,
+          gaseosas_sueltas: r.gaseosas_sueltas,
+          adic_ca:          r.adic_ca,
+          adic_ce:          r.adic_ce,
+          adic_po:          r.adic_po,
+          tostilocos:       r.tostilocos,
+          dorilokos:        r.dorilokos,
+          efectivo:         r.efectivo,
+          transferencia:    r.transferencia,
+          total:            r.total,
+          cuadra:           r.cuadra,
+          ventas:           detPorFecha[r.fecha] || []
+        })),
+        gastos:    r3.data || [],
+        quincenas: r4.data || [],
+        config:    r5.data || []
+      };
+
+      const json  = JSON.stringify(exportData, null, 2);
+      const blob  = new Blob([json], { type: 'application/json' });
+      const url   = URL.createObjectURL(blob);
+      const a     = document.createElement('a');
+      const stamp = new Date().toLocaleDateString('en-CA',
+                    { timeZone: 'America/Bogota' });
+      a.href     = url;
+      a.download = 'glizzy-' + stamp + '.json';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      const nr = exportData.reportes.length;
+      const ng = exportData.gastos.length;
+      const el = document.getElementById('exp-ok');
+      el.textContent = '✓ ' + nr + ' reporte' + (nr !== 1 ? 's' : '') +
+                       ' · ' + ng + ' gasto' + (ng !== 1 ? 's' : '') +
+                       ' · ' + exportData.quincenas.length + ' quincenas';
+      el.hidden = false;
+
+    } catch(e){
+      mostrarError('error-exp', 'Error al exportar: ' + (e.message || 'error desconocido'));
+    } finally {
+      btn.disabled = false; btn.textContent = 'Descargar JSON';
+    }
+  }
+
+  document.getElementById('btn-exportar').addEventListener('click', exportarJSON);
 
   /* ============================================================
      FASE 4: FINANZAS
