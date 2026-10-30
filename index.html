@@ -510,7 +510,7 @@
   </div>
 
   <!-- ===================== PANTALLA LOGIN ===================== -->
-  <div id="pantalla-login" hidden>
+  <div id="pantalla-login">
     <div class="brand">
       <div class="eyebrow">Perros calientes</div>
       <h1>Glizzy</h1>
@@ -789,9 +789,12 @@ if(typeof module !== 'undefined') module.exports = GlizzyQR;
      AUTENTICACIÓN
      ============================================================ */
   // Arranque: verificar sesión guardada
-  db.auth.getSession().then(({ data: { session } }) => {
-    if(session){ mostrarApp(session.user); } else { mostrarLogin(); }
-  });
+  db.auth.getSession()
+    .then(({ data: { session } }) => {
+      if(session){ mostrarApp(session.user); }
+      // sin sesión: pantalla-login ya es visible, no hace falta llamar mostrarLogin()
+    })
+    .catch(() => { /* sin sesión: pantalla-login ya visible */ });
 
   // Cambios posteriores: solo reaccionar a login/logout explícitos
   db.auth.onAuthStateChange((evento, sesion) => {
