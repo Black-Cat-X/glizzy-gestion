@@ -467,6 +467,42 @@
     font-size: 12px;
     border: 1px dashed #c8b99a;
   }
+  .toggle.btn-guardar:not(:disabled):not(.guardado) {
+    background: var(--mustard);
+    color: #221a0f;
+    border: none;
+  }
+  .toggle.btn-guardar:not(:disabled):not(.guardado):hover { filter: brightness(1.08); }
+  .toggle.btn-guardar.guardado {
+    background: #1a3020;
+    color: #6fcf97;
+    border: 1px solid #2d5a3d;
+    cursor: default;
+  }
+
+  /* ---- HISTORIAL ---- */
+  .hist-titulo {
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--mustard);
+    margin-bottom: 12px;
+  }
+  .hist-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 0;
+    border-bottom: 1px solid #2e2318;
+    font-size: 12px;
+  }
+  .hist-row:last-child { border-bottom: none; }
+  .hist-fecha  { color: var(--ink-soft); min-width: 82px; }
+  .hist-vendor { color: var(--paper); flex: 1; font-weight: 700; }
+  .hist-nums   { color: var(--ink-soft); font-size: 11px; text-align: right; }
+  .hist-total  { color: var(--paper); min-width: 72px; text-align: right; }
+  .hist-ok     { color: #6fcf97; font-size: 13px; }
+  .hist-warn   { color: #e2a03f; font-size: 13px; }
 
   .detalle { display: none; margin-top: 4px; }
   .tabla-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
@@ -622,7 +658,7 @@
           </div>
 
           <button class="toggle btn-guardar" id="btn-guardar" disabled>
-            Guardar en Supabase — disponible en Fase 2
+            Guardar en Supabase
           </button>
           <button class="toggle" id="toggleDetalle">Ver detalle de ventas ▾</button>
           <div class="detalle" id="detalle">
@@ -638,6 +674,11 @@
             </div>
           </div>
         </div>
+      </div>
+
+      <div class="panel" id="historial-panel" hidden>
+        <div class="hist-titulo">Historial</div>
+        <div id="historial-lista"></div>
       </div>
 
     </section>
@@ -816,6 +857,7 @@ if(typeof module !== 'undefined') module.exports = GlizzyQR;
     document.getElementById('app').hidden = false;
     activarTab('venta');
     recibirCompartido();
+    cargarHistorial();
   }
 
   document.getElementById('form-login').addEventListener('submit', async function(e){
@@ -854,7 +896,10 @@ if(typeof module !== 'undefined') module.exports = GlizzyQR;
     });
   }
   document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => activarTab(btn.dataset.tab));
+    btn.addEventListener('click', () => {
+      activarTab(btn.dataset.tab);
+      if(btn.dataset.tab === 'venta') cargarHistorial();
+    });
   });
 
   /* ============================================================
@@ -874,6 +919,100 @@ if(typeof module !== 'undefined') module.exports = GlizzyQR;
   function ocultarError(id){
     const el = document.getElementById(id);
     el.style.display = 'none';
+  }
+
+
+  /* ============================================================
+     FASE 2: GUARDAR VENTA E HISTORIAL
+     ============================================================ */
+  async function verificarGuardado(fecha){
+    const btn = document.getElementById('btn-guardar');
+    try {
+      const { data } = await db.from('reportes_venta')
+        .select('fecha').eq('fecha', fecha).maybeSingle();
+      if(data){
+        btn.disabled = true;
+        btn.className = 'toggle btn-guardar guardado';
+        btn.textContent = '✓ Ya guardado';
+      } else {
+        btn.disabled = false;
+        btn.textContent = 'Guardar en Supabase';
+      }
+    } catch(_){ btn.disabled = false; btn.textContent = 'Guardar en Supabase'; }
+  }
+
+  async function guardarVenta(){
+    if(!ultimoData || !ultimoResumen) return;
+    const btn = document.getElementById('btn-guardar');
+    btn.disabled = true;
+    btn.textContent = 'Guardando…';
+    try {
+      const { error } = await db.rpc('guardar_venta', {
+        p_fecha:            ultimoData.fecha,
+        p_vendedor:         ultimoData.vendedor,
+        p_firma:            ultimoData.firma,
+        p_num_ventas:       ultimoResumen.numVentas,
+        p_perros:           ultimoResumen.perros,
+        p_combos:           ultimoResumen.combos,
+        p_gaseosas_sueltas: ultimoResumen.gaseosasSueltas,
+        p_adic_ca:          ultimoResumen.adicionales.CA,
+        p_adic_ce:          ultimoResumen.adicionales.CE,
+        p_adic_po:          ultimoResumen.adicionales.PO,
+        p_tostilocos:       ultimoResumen.snacksPor.TO,
+        p_dorilokos:        ultimoResumen.snacksPor.DO,
+        p_efectivo:         ultimoResumen.efectivo,
+        p_transferencia:    ultimoResumen.transferencia,
+        p_total:            ultimoResumen.total,
+        p_cuadra:           ultimoResumen.cuadra,
+        p_payload:          document.getElementById('input').value.trim(),
+        p_ventas:           ultimoData.ventas
+      });
+      if(error) throw error;
+      btn.className = 'toggle btn-guardar guardado';
+      btn.textContent = '✓ Guardado';
+      setEstado('Venta guardada correctamente.', 'ok');
+      cargarHistorial();
+    } catch(e){
+      const msg = e.message || '';
+      if(msg.includes('Ya existe') || msg.includes('unique_violation')){
+        btn.className = 'toggle btn-guardar guardado';
+        btn.textContent = '✓ Ya guardado';
+        setEstado('Esta fecha ya estaba guardada.', 'ok');
+        cargarHistorial();
+      } else {
+        btn.disabled = false;
+        btn.textContent = 'Guardar en Supabase';
+        mostrarError('error', 'No se pudo guardar: ' + (msg || 'error desconocido'));
+      }
+    }
+  }
+
+  document.getElementById('btn-guardar').addEventListener('click', guardarVenta);
+
+  async function cargarHistorial(){
+    if(!document.getElementById('historial-panel')) return;
+    try {
+      const { data, error } = await db
+        .from('reportes_venta')
+        .select('fecha, vendedor, perros, combos, gaseosas_sueltas, total, cuadra')
+        .order('fecha', { ascending: false })
+        .limit(10);
+      if(error || !data || !data.length){
+        document.getElementById('historial-panel').hidden = true;
+        return;
+      }
+      document.getElementById('historial-lista').innerHTML = data.map(r => {
+        const f = r.fecha.slice(5).replace('-', '/');
+        return `<div class="hist-row">
+          <span class="hist-fecha">${f}</span>
+          <span class="hist-vendor">${esc(r.vendedor)}</span>
+          <span class="hist-nums">${r.perros}p · ${r.combos}c · ${r.gaseosas_sueltas}g</span>
+          <span class="hist-total">${fmt(r.total)}</span>
+          <span class="${r.cuadra ? 'hist-ok' : 'hist-warn'}">${r.cuadra ? '✓' : '⚠'}</span>
+        </div>`;
+      }).join('');
+      document.getElementById('historial-panel').hidden = false;
+    } catch(_){ document.getElementById('historial-panel').hidden = true; }
   }
 
   /* ============================================================
@@ -1085,6 +1224,11 @@ if(typeof module !== 'undefined') module.exports = GlizzyQR;
       const resumen = analizar(data);
       ultimoData = data; ultimoResumen = resumen;
       render(data, resumen);
+      const btnG = document.getElementById('btn-guardar');
+      btnG.disabled = true;
+      btnG.className = 'toggle btn-guardar';
+      btnG.textContent = 'Comprobando…';
+      verificarGuardado(data.fecha);
       return true;
     } catch(e){
       mostrarError('error', e.message);
@@ -1101,6 +1245,10 @@ if(typeof module !== 'undefined') module.exports = GlizzyQR;
     ocultarError('error');
     document.getElementById('receiptWrap').style.display = 'none';
     ultimoData = null; ultimoResumen = null;
+    const btnL = document.getElementById('btn-guardar');
+    btnL.disabled = true;
+    btnL.className = 'toggle btn-guardar';
+    btnL.textContent = 'Guardar en Supabase';
   });
 
   document.getElementById('toggleDetalle').addEventListener('click', function(){
@@ -1159,7 +1307,7 @@ if(typeof module !== 'undefined') module.exports = GlizzyQR;
       document.getElementById('input').value = res.texto;
       if(!procesar()){ setEstado('Leí el QR pero el código no tiene el formato esperado (ver error abajo).', 'bad'); return; }
       if(!ultimoResumen.cuadra){ setEstado('QR leído, pero las cuentas no cuadran. Revisa el aviso antes de guardar.', 'warn'); return; }
-      setEstado('✓ QR leído. Revisa el recibo y guárdalo en Supabase (Fase 2).', 'ok');
+      setEstado('✓ QR leído. Revisa el recibo y pulsa Guardar.', 'ok');
     } catch(e){
       setEstado(e.message || 'Error leyendo la imagen.', 'bad');
     }
