@@ -3,7 +3,7 @@
 -- Ejecutar en Supabase > SQL Editor
 -- =============================================================
 
--- Vista stock actual (suma de movimientos por insumo)
+-- Vista stock actual (solo insumos con descuento_auto, orden fijo)
 CREATE OR REPLACE VIEW stock_actual AS
 SELECT
   i.id,
@@ -14,9 +14,22 @@ SELECT
   COALESCE(SUM(m.cantidad), 0) AS stock
 FROM insumos i
 LEFT JOIN movimientos_stock m ON m.insumo_id = i.id
-WHERE i.activo = true
+WHERE i.activo = true AND i.descuento_auto = true
 GROUP BY i.id, i.nombre, i.unidad, i.minimo_semana_baja, i.descuento_auto
-ORDER BY i.nombre;
+ORDER BY CASE i.nombre
+  WHEN 'Pan'       THEN 1
+  WHEN 'Salchicha' THEN 2
+  WHEN 'Queso'     THEN 3
+  WHEN 'Empaque'   THEN 4
+  WHEN 'Gaseosa'   THEN 5
+  WHEN 'Carne CA'  THEN 6
+  WHEN 'Carne CE'  THEN 7
+  WHEN 'Carne PO'  THEN 8
+  WHEN 'Birria'    THEN 9
+  WHEN 'Tostacos'  THEN 10
+  WHEN 'Doritos'   THEN 11
+  ELSE 99
+END;
 
 ALTER VIEW stock_actual SET (security_invoker = true);
 GRANT SELECT ON stock_actual TO authenticated;
