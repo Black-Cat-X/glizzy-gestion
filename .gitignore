@@ -1,0 +1,5 @@
+passwd.txt
+*.zip
+tareas_pendientes.txt
+*.md
+!README.md
