@@ -634,12 +634,59 @@
     font-size: 12px;
   }
   .hist-row:last-child { border-bottom: none; }
-  .hist-fecha  { color: var(--ink-soft); min-width: 82px; }
+  .hist-fecha  { color: var(--ink-soft); min-width: 56px; }
   .hist-vendor { color: var(--paper); flex: 1; font-weight: 700; }
-  .hist-nums   { color: var(--ink-soft); font-size: 11px; text-align: right; }
   .hist-total  { color: var(--paper); min-width: 72px; text-align: right; }
   .hist-ok     { color: #6fcf97; font-size: 13px; }
   .hist-warn   { color: #e2a03f; font-size: 13px; }
+  .hist-btn-ver {
+    background: none;
+    border: 1px solid #40342376;
+    color: var(--ink-soft);
+    font-size: 10px;
+    letter-spacing: .5px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: 'Space Mono', monospace;
+    text-transform: uppercase;
+    font-weight: 700;
+  }
+  .hist-btn-ver:hover { color: var(--paper); border-color: #6b5d4a; }
+  .hist-detalle {
+    display: none;
+    background: #14100C;
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin: 2px 0 6px;
+    font-size: 12px;
+  }
+  .hist-detalle.abierto { display: block; }
+  .hist-d-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 5px;
+    color: var(--ink-soft);
+  }
+  .hist-d-row .v { color: var(--paper); font-weight: 700; }
+  .hist-btn-del {
+    width: 100%;
+    margin-top: 8px;
+    background: #2e1712;
+    border: 1px solid #5a2d1a;
+    color: #f1b7ab;
+    font-size: 11px;
+    padding: 9px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-family: 'Space Mono', monospace;
+    letter-spacing: .5px;
+    text-transform: uppercase;
+    font-weight: 700;
+  }
+  .hist-btn-del:hover { background: #3e2018; color: #eb5757; }
+  .hist-btn-del:disabled { opacity: .5; cursor: not-allowed; }
 
   .detalle { display: none; margin-top: 4px; }
   .tabla-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
@@ -814,7 +861,7 @@
       </div>
 
       <div class="panel" id="historial-panel" hidden>
-        <div class="hist-titulo">Historial</div>
+        <div class="hist-titulo">Reportes guardados</div>
         <div id="historial-lista"></div>
       </div>
 
@@ -1712,23 +1759,90 @@ if(typeof module !== 'undefined') module.exports = GlizzyQR;
     try {
       const { data, error } = await db
         .from('reportes_venta')
-        .select('fecha, vendedor, perros, combos, gaseosas_sueltas, total, cuadra')
+        .select('fecha,vendedor,perros,combos,gaseosas_sueltas,adic_ca,adic_ce,adic_po,tostilocos,dorilokos,efectivo,transferencia,total,cuadra')
         .order('fecha', { ascending: false })
-        .limit(10);
+        .limit(20);
       if(error || !data || !data.length){
         document.getElementById('historial-panel').hidden = true;
         return;
       }
       document.getElementById('historial-lista').innerHTML = data.map(r => {
-        const f = r.fecha.slice(5).replace('-', '/');
-        return `<div class="hist-row">
-          <span class="hist-fecha">${f}</span>
-          <span class="hist-vendor">${esc(r.vendedor)}</span>
-          <span class="hist-nums">${r.perros}p · ${r.combos}c · ${r.gaseosas_sueltas}g</span>
-          <span class="hist-total">${fmt(r.total)}</span>
-          <span class="${r.cuadra ? 'hist-ok' : 'hist-warn'}">${r.cuadra ? '✓' : '⚠'}</span>
+        const f   = r.fecha.slice(5).replace('-', '/');
+        const dId = 'hd-' + r.fecha;
+        const extras = [
+          r.adic_ca    ? `CA: <span class="v">${r.adic_ca}</span>`   : '',
+          r.adic_ce    ? `CE: <span class="v">${r.adic_ce}</span>`   : '',
+          r.adic_po    ? `PO: <span class="v">${r.adic_po}</span>`   : '',
+          r.tostilocos ? `TO: <span class="v">${r.tostilocos}</span>`: '',
+          r.dorilokos  ? `DO: <span class="v">${r.dorilokos}</span>` : ''
+        ].filter(Boolean).map(x => `<span>${x}</span>`).join('');
+        return `<div class="hist-item">
+          <div class="hist-row">
+            <span class="hist-fecha">${f}</span>
+            <span class="hist-vendor">${esc(r.vendedor)}</span>
+            <span class="hist-total">${fmt(r.total)}</span>
+            <span class="${r.cuadra ? 'hist-ok' : 'hist-warn'}">${r.cuadra ? '✓' : '⚠'}</span>
+            <button class="hist-btn-ver" data-target="${dId}">Ver</button>
+          </div>
+          <div class="hist-detalle" id="${dId}">
+            <div class="hist-d-row">
+              <span>Efectivo: <span class="v">${fmt(r.efectivo)}</span></span>
+              <span>Transf.: <span class="v">${fmt(r.transferencia)}</span></span>
+            </div>
+            <div class="hist-d-row">
+              <span>${r.perros} perros</span>
+              <span>${r.combos} combos</span>
+              <span>${r.gaseosas_sueltas} gaseosas</span>
+            </div>
+            ${extras ? `<div class="hist-d-row">${extras}</div>` : ''}
+            <button class="hist-btn-del" data-fecha="${esc(r.fecha)}">
+              Eliminar este reporte
+            </button>
+          </div>
         </div>`;
       }).join('');
+
+      // Toggle detalle
+      document.getElementById('historial-lista').querySelectorAll('.hist-btn-ver')
+        .forEach(btn => btn.addEventListener('click', () => {
+          const d = document.getElementById(btn.dataset.target);
+          const ok = d.classList.toggle('abierto');
+          btn.textContent = ok ? 'Cerrar' : 'Ver';
+        }));
+
+      // Eliminar reporte
+      document.getElementById('historial-lista').querySelectorAll('.hist-btn-del')
+        .forEach(btn => btn.addEventListener('click', async () => {
+          const fecha = btn.dataset.fecha;
+          if(!confirm(
+            '¿Eliminar el reporte del ' + fecha + '?
+
+' +
+            'Se borrarán el detalle de ventas y los movimientos de stock de ese día. ' +
+            'Podrás volver a guardar el reporte correcto desde el QR.
+
+' +
+            'Esta acción no se puede deshacer.'
+          )) return;
+          btn.disabled = true; btn.textContent = 'Eliminando…';
+          const { error } = await db.from('reportes_venta').delete().eq('fecha', fecha);
+          if(error){
+            btn.disabled = false; btn.textContent = 'Eliminar este reporte';
+            alert('Error: ' + error.message);
+            return;
+          }
+          // Si el recibo actual era ese día, limpiarlo
+          if(ultimoData && ultimoData.fecha === fecha){
+            ultimoData = null; ultimoResumen = null;
+            document.getElementById('receiptWrap').style.display = 'none';
+            const btnG = document.getElementById('btn-guardar');
+            btnG.disabled = true;
+            btnG.className = 'toggle btn-guardar';
+            btnG.textContent = 'Guardar en Supabase';
+          }
+          cargarHistorial();
+        }));
+
       document.getElementById('historial-panel').hidden = false;
     } catch(_){ document.getElementById('historial-panel').hidden = true; }
   }
