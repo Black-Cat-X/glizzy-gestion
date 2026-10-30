@@ -1815,13 +1815,9 @@ if(typeof module !== 'undefined') module.exports = GlizzyQR;
         .forEach(btn => btn.addEventListener('click', async () => {
           const fecha = btn.dataset.fecha;
           if(!confirm(
-            '¿Eliminar el reporte del ' + fecha + '?
-
-' +
+            '¿Eliminar el reporte del ' + fecha + '?\n\n' +
             'Se borrarán el detalle de ventas y los movimientos de stock de ese día. ' +
-            'Podrás volver a guardar el reporte correcto desde el QR.
-
-' +
+            'Podrás volver a guardar el reporte correcto desde el QR.\n\n' +
             'Esta acción no se puede deshacer.'
           )) return;
           btn.disabled = true; btn.textContent = 'Eliminando…';
