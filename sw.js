@@ -1,6 +1,6 @@
-// Service worker de Glizzy Gestión v2
+// Service worker de Glizzy Gestión v3
 // Recibe fotos compartidas desde Android y mantiene el shell disponible sin conexión.
-const CACHE = 'glizzy-gestion-v2';
+const CACHE = 'glizzy-gestion-v3';
 const CACHE_FOTO = 'glizzy-share';
 const ARCHIVOS = [
   './',
