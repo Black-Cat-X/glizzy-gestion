@@ -315,6 +315,8 @@
     const [version, fechaRaw, vendedor, firma, resumenRaw] = parts;
 
     if(!/^\d{6}$/.test(fechaRaw)) throw new Error('Campo de fecha inválido: "' + fechaRaw + '"');
+    const _mm = +fechaRaw.slice(2,4), _dd = +fechaRaw.slice(4,6);
+    if(_mm < 1 || _mm > 12 || _dd < 1 || _dd > 31) throw new Error('Fecha fuera de rango: "' + fechaRaw + '"');
     const fecha = `20${fechaRaw.slice(0,2)}-${fechaRaw.slice(2,4)}-${fechaRaw.slice(4,6)}`;
 
     if(!/^[A-Z0-9]{1,12}$/.test(vendedor)) throw new Error('Campo de vendedor inválido: "' + vendedor + '"');
