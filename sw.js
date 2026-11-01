@@ -1,14 +1,24 @@
-// Service worker de Glizzy Gestión v6
+// Service worker de Glizzy Gestión v7
 // Recibe fotos compartidas desde Android y mantiene el shell disponible sin conexión.
-const CACHE = 'glizzy-gestion-v6';
+const CACHE = 'glizzy-gestion-v7';
 const CACHE_FOTO = 'glizzy-share';
 const ARCHIVOS = [
   './',
   './index.html',
   './manifest.webmanifest',
-  './supabase.min.js',
   './icon-192.png',
-  './icon-512.png'
+  './icon-512.png',
+  './css/app.css',
+  './vendor/jsqr.min.js',
+  './vendor/supabase.min.js',
+  './js/qr.js',
+  './js/config.js',
+  './js/utils.js',
+  './js/exportar.js',
+  './js/finanzas.js',
+  './js/inventario.js',
+  './js/venta.js',
+  './js/app.js'
 ];
 
 self.addEventListener('install', e => {
