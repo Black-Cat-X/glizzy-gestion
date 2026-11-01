@@ -23,6 +23,19 @@
     btn.disabled = true;
     btn.textContent = 'Guardando…';
     try {
+      // Resumir mermas para el RPC (mismo patrón de recetas que usa el SQL)
+      const mAcc = { perros: 0, snack_to: 0, snack_do: 0, insumos: {} };
+      for(const m of (ultimoData.mermas || [])){
+        for(const ln of m.lineas){
+          if(ln.tipo === 'perro')        mAcc.perros   += ln.cant;
+          else if(ln.tipo === 'snack'){
+            if(ln.abbr === 'TO')         mAcc.snack_to += ln.cant;
+            else if(ln.abbr === 'DO')    mAcc.snack_do += ln.cant;
+          } else if(ln.tipo === 'insumo'){
+            mAcc.insumos[ln.insumo_id] = (mAcc.insumos[ln.insumo_id] || 0) + ln.cant;
+          }
+        }
+      }
       const { error } = await db.rpc('guardar_venta', {
         p_fecha:            ultimoData.fecha,
         p_vendedor:         ultimoData.vendedor,
@@ -41,7 +54,14 @@
         p_total:            ultimoResumen.total,
         p_cuadra:           ultimoResumen.cuadra,
         p_payload:          document.getElementById('input').value.trim(),
-        p_ventas:           ultimoData.ventas
+        p_ventas:           ultimoData.ventas,
+        p_mermas:           {
+          perros:   mAcc.perros,
+          snack_to: mAcc.snack_to,
+          snack_do: mAcc.snack_do,
+          insumos:  Object.entries(mAcc.insumos).map(([id, cant]) => ({ id: +id, cant }))
+        },
+        p_ajustes:          (ultimoData.ajustes || []).map(a => ({ insumo_id: a.insumo_id, cant: a.cant }))
       });
       if(error) throw error;
       btn.className = 'toggle btn-guardar guardado';
@@ -263,6 +283,28 @@
     return map;
   }
 
+  function parseMerma(raw, catSnack){
+    const f = splitN(raw, ':', 2);
+    const hhmm = f[1];
+    if(!/^\d{4}$/.test(hhmm)) throw new Error(`Merma con hora inválida: "${raw}"`);
+    const lineas = (f[2] || '').split('/').map(ln => {
+      const p = ln.split(':');
+      if(p[0] === 'P') return { tipo: 'perro',  cant: parseFloat(p[1]) };
+      if(p[0] === 'S') return { tipo: 'snack',  cant: parseFloat(p[1]), abbr: catSnack[p[2]] || null };
+      if(p[0] === 'I') return { tipo: 'insumo', cant: parseFloat(p[1]), insumo_id: +p[2] };
+      return null;
+    }).filter(Boolean);
+    return { hhmm, lineas };
+  }
+
+  function parseAjuste(raw){
+    const f = raw.split(':');
+    if(f.length < 4) throw new Error(`Ajuste mal formado: "${raw}"`);
+    const cant = parseFloat(f[3]);
+    if(isNaN(cant)) throw new Error(`Cantidad inválida en ajuste: "${raw}"`);
+    return { hhmm: f[1], insumo_id: +f[2], cant };
+  }
+
   function parsePayload(raw){
     const parts = raw.replace(/\s+/g, '').split('*');
     if(parts[0] !== 'G1'){
@@ -290,44 +332,57 @@
     const catSnack = parseCatalogo(parts[idx], 'N');
     if(parts[idx] && parts[idx].startsWith('N:')) idx++;
 
-    const ventasRaw = parts.slice(idx).filter(v => v !== '');
+    const ventas = [], catInsumos = {}, mermas = [], ajustes = [];
+    let ventaIdx = 0;
 
-    const ventas = ventasRaw.map((v, i) => {
-      const [hhmm, totalStr, metodoStr, lineasStr] = splitN(v, ':', 3);
-      if(!/^\d{4}$/.test(hhmm) || !/^\d+$/.test(totalStr || '') || !/^[01]$/.test(metodoStr || '') || !lineasStr){
-        throw new Error(`Registro de venta #${i+1} mal formado: "${v}"`);
+    for(const part of parts.slice(idx)){
+      if(!part) continue;
+      const first = part[0];
+      if(first >= '0' && first <= '9'){
+        const [hhmm, totalStr, metodoStr, lineasStr] = splitN(part, ':', 3);
+        if(!/^\d{4}$/.test(hhmm) || !/^\d+$/.test(totalStr || '') || !/^[01]$/.test(metodoStr || '') || !lineasStr){
+          throw new Error(`Registro de venta #${ventaIdx+1} mal formado: "${part}"`);
+        }
+        const items = lineasStr.split('/').map(linea => {
+          const f = linea.split(':');
+          if(f[0] === 'P'){
+            if(f.length !== 4 || !/^\d+$/.test(f[1]) || !/^[01]$/.test(f[2]))
+              throw new Error(`Línea de perro mal formada: "${linea}"`);
+            const adicIds = f[3] ? f[3].split('.').filter(Boolean) : [];
+            const abbrs   = adicIds.map(id => catAdic[id] || null);
+            return {
+              tipo: 'P', cant: +f[1], combo: f[2] === '1',
+              adicAbbrs:  abbrs.filter(Boolean),
+              adicionales: adicIds.map((id, k) => NOMBRES_ADIC[abbrs[k]] || abbrs[k] || `Adicional #${id}`)
+            };
+          }
+          if(f[0] === 'G'){
+            if(f.length !== 2 || !/^\d+$/.test(f[1]))
+              throw new Error(`Línea de gaseosa mal formada: "${linea}"`);
+            return { tipo: 'G', cant: +f[1] };
+          }
+          if(f[0] === 'S'){
+            if(f.length !== 4 || !/^\d+$/.test(f[1]) || !/^[01]$/.test(f[2]))
+              throw new Error(`Línea de snack mal formada: "${linea}"`);
+            const abbr   = f[3] ? (catSnack[f[3]] || null) : null;
+            const nombre = f[3] ? (NOMBRES_SNACK[abbr] || abbr || `Snack #${f[3]}`) : 'Snack';
+            return { tipo: 'S', cant: +f[1], combo: f[2] === '1', abbr, nombre };
+          }
+          throw new Error(`Tipo de línea desconocido: "${linea}"`);
+        });
+        ventas.push({ hhmm, total: +totalStr, metodo: +metodoStr, items });
+        ventaIdx++;
+      } else if(part.startsWith('I:')){
+        Object.assign(catInsumos, parseCatalogo(part, 'I'));
+      } else if(part.startsWith('X:')){
+        mermas.push(parseMerma(part, catSnack));
+      } else if(part.startsWith('A:')){
+        ajustes.push(parseAjuste(part));
       }
-      const items = lineasStr.split('/').map(linea => {
-        const f = linea.split(':');
-        if(f[0] === 'P'){
-          if(f.length !== 4 || !/^\d+$/.test(f[1]) || !/^[01]$/.test(f[2]))
-            throw new Error(`Línea de perro mal formada: "${linea}"`);
-          const adicIds = f[3] ? f[3].split('.').filter(Boolean) : [];
-          const abbrs   = adicIds.map(id => catAdic[id] || null);
-          return {
-            tipo: 'P', cant: +f[1], combo: f[2] === '1',
-            adicAbbrs:  abbrs.filter(Boolean),
-            adicionales: adicIds.map((id, k) => NOMBRES_ADIC[abbrs[k]] || abbrs[k] || `Adicional #${id}`)
-          };
-        }
-        if(f[0] === 'G'){
-          if(f.length !== 2 || !/^\d+$/.test(f[1]))
-            throw new Error(`Línea de gaseosa mal formada: "${linea}"`);
-          return { tipo: 'G', cant: +f[1] };
-        }
-        if(f[0] === 'S'){
-          if(f.length !== 4 || !/^\d+$/.test(f[1]) || !/^[01]$/.test(f[2]))
-            throw new Error(`Línea de snack mal formada: "${linea}"`);
-          const abbr   = f[3] ? (catSnack[f[3]] || null) : null;
-          const nombre = f[3] ? (NOMBRES_SNACK[abbr] || abbr || `Snack #${f[3]}`) : 'Snack';
-          return { tipo: 'S', cant: +f[1], combo: f[2] === '1', abbr, nombre };
-        }
-        throw new Error(`Tipo de línea desconocido: "${linea}"`);
-      });
-      return { hhmm, total: +totalStr, metodo: +metodoStr, items };
-    });
+      // else: tipo futuro reservado, ignorar
+    }
 
-    return { version, fecha, vendedor, firma, resumen, ventas };
+    return { version, fecha, vendedor, firma, resumen, ventas, catInsumos, mermas, ajustes };
   }
 
   function analizar(data){

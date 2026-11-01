@@ -1,0 +1,197 @@
+=====================================================================
+ CAMBIOS AL QR DE CIERRE DEL DÍA — GUÍA PARA AJUSTAR EL LECTOR
+ Sistema POS Perros Calientes Exprés · 31/10/2026
+=====================================================================
+
+RESUMEN
+-------
+El QR sigue usando el formato "G1". Se agregaron 3 tipos de registro
+nuevos para reportar movimientos de inventario que NO se cobran:
+
+  I:  catálogo de insumos
+  X:  merma (producto o insumo dado de baja por daño)
+  A:  ajuste manual de stock (suma o resta, hecho por vendedor o admin)
+
+Estos registros:
+  - Solo aparecen si en el día hubo al menos una merma o un ajuste.
+    Un día sin mermas ni ajustes produce EXACTAMENTE el mismo QR de antes.
+  - Van SIEMPRE al final, después de todas las ventas.
+  - NO afectan el resumen R: (ventas, total, efectivo, transferencia).
+  - NO forman parte del código de verificación (firma). El código sigue
+    validando únicamente las ventas, igual que antes.
+
+
+1. ESTRUCTURA GENERAL
+---------------------
+Los registros se separan con "*". Las posiciones 0 a 6 no cambiaron:
+
+  [0] G1                     versión del formato
+  [1] YYMMDD                 fecha del cierre (ej. 261031)
+  [2] VENDEDOR               usuario que generó el cierre (A-Z 0-9, máx 12)
+  [3] CODIGO                 código de verificación (10 caracteres)
+  [4] R:N:TOTAL:EF:TR        resumen de ventas del día
+  [5] C:ID+AB-ID+AB...       catálogo de adicionales de carne
+  [6] N:ID+AB-ID+AB...       catálogo de snacks
+  [7...] ventas              una por registro (igual que antes)
+  [...]  I:  X:  A:          NUEVO — solo si hubo mermas o ajustes
+
+Orden de los registros nuevos, cuando aparecen:
+  primero un único I:, luego todos los X: (en orden de hora),
+  luego todos los A: (en orden de hora).
+
+
+2. CÓMO DISTINGUIR UNA VENTA DE UN REGISTRO NUEVO   <-- CAMBIO CLAVE
+------------------------------------------------------------------
+A partir de la posición 7:
+
+  - Si el registro empieza por un DÍGITO (0-9)  -> es una VENTA
+        formato:  HHMM:TOTAL:M:LINEAS          (sin cambios)
+  - Si empieza por "I:"                         -> catálogo de insumos
+  - Si empieza por "X:"                         -> merma
+  - Si empieza por "A:"                         -> ajuste de stock
+  - Cualquier otra letra                         -> ignorar (reservado
+                                                    para futuras versiones)
+
+IMPORTANTE: si el lector actual trata TODO lo que viene después de la
+posición 6 como venta, fallará (o sumará datos falsos) los días que
+tengan mermas o ajustes. Esa es la única corrección obligatoria.
+
+
+3. FORMATO DE CADA REGISTRO NUEVO
+---------------------------------
+
+3.1  I: — Catálogo de insumos
+     I:ID+AB-ID+AB-...
+     Igual que los catálogos C: y N:. Pares "id+abreviatura" separados
+     por "-". Sirve para saber qué insumo es cada INSUMO_ID.
+
+     Ejemplo:
+       I:1+PA-2+SA-3+QU-4+EM-5+CA-6+CE-7+PO-8+GA-11+TO-12+DO-13+BI
+       1=Pan, 2=Salchicha, 3=Queso, 4=Empaque, 5=Carne y maíz,
+       6=Cerdo y piña, 7=Pollo y tocineta, 8=Gaseosa,
+       11=Tostaco, 12=Dorito, 13=Birria
+     (Los ids pueden tener huecos, ej. 9 y 10 no existen. Es normal.)
+
+3.2  X: — Merma (baja por daño, sin cobro)
+     X:HHMM:LINEA/LINEA/...
+     HHMM = hora Colombia. Cada merma puede tener varias líneas,
+     separadas por "/". Tipos de línea:
+
+       P:CANT              perro tradicional completo
+                           (descuenta pan, salchicha, queso y empaque)
+       S:CANT:SNACK_ID     snack completo (SNACK_ID -> catálogo N:)
+       I:CANT:INSUMO_ID    insumo suelto  (INSUMO_ID -> catálogo I:)
+
+     OJO: "I:" dentro de una línea de merma NO es el catálogo; el
+     catálogo es un registro propio (entre "*"). Separa primero por "*",
+     luego por "/" y por último por ":".
+
+     Ejemplo:
+       X:1120:P:2/S:1:1/I:0.5:1
+       -> a las 11:20: 2 perros tradicionales, 1 Tostilocos,
+          0.5 de Pan (insumo 1)
+
+3.3  A: — Ajuste manual de stock
+     A:HHMM:INSUMO_ID:CANT
+     CANT positiva = se agregó stock; negativa = se restó.
+
+     Ejemplos:
+       A:0900:1:20     a las 09:00 se sumaron 20 Pan
+       A:1301:4:-1     a las 13:01 se restó 1 Empaque
+
+
+4. REGLAS DE LOS NÚMEROS
+------------------------
+- CANT puede ser decimal con punto: "0.5", "1.25" (máx. 3 decimales).
+  Los enteros van sin decimales: "2", no "2.0".
+- CANT negativa lleva "-" delante (solo en A:). Como el "-" también
+  separa pares en los catálogos, interpreta CANT SOLO después de
+  separar el registro A: por ":".
+- HHMM siempre son 4 dígitos (ej. "0905").
+
+
+5. EJEMPLO COMPLETO REAL (prueba del 31/10/2026)
+-------------------------------------------------
+G1*261031*1234*9110FB6921*R:0:0:0:0*C:5+CA-6+CE-7+PO*N:1+TO-2+DO*I:1+PA-2+SA-3+QU-4+EM-5+CA-6+CE-7+PO-8+GA-11+TO-12+DO-13+BI*A:1301:4:-1
+
+  G1 ................ formato
+  261031 ............ 31/10/2026
+  1234 .............. usuario que cerró
+  9110FB6921 ........ código de verificación
+  R:0:0:0:0 ......... 0 ventas, $0
+  C:..., N:... ...... catálogos de siempre
+  (no hay ventas)
+  I:... ............. catálogo de insumos (porque hubo un ajuste)
+  A:1301:4:-1 ....... 13:01, Empaque, -1
+
+
+6. PSEUDOCÓDIGO SUGERIDO PARA EL LECTOR
+---------------------------------------
+  registros = texto.split("*")
+  # posiciones 0..6 se leen igual que antes
+  ventas, mermas, ajustes, cat_insumos = [], [], [], {}
+
+  para cada reg en registros[7:]:
+      si reg[0] es dígito:
+          ventas.append(leer_venta(reg))           # lógica actual
+      si no, si reg empieza con "I:":
+          para par en reg[2:].split("-"):
+              id, abrev = par.split("+")
+              cat_insumos[id] = abrev
+      si no, si reg empieza con "X:":
+          _, hhmm, resto = reg.split(":", 2)
+          lineas = []
+          para ln en resto.split("/"):
+              p = ln.split(":")
+              si p[0] == "P": lineas.append(("perro",  p[1], None))
+              si p[0] == "S": lineas.append(("snack",  p[1], p[2]))
+              si p[0] == "I": lineas.append(("insumo", p[1], p[2]))
+          mermas.append((hhmm, lineas))
+      si no, si reg empieza con "A:":
+          _, hhmm, insumo_id, cant = reg.split(":")
+          ajustes.append((hhmm, insumo_id, float(cant)))
+      si no:
+          ignorar   # tipos futuros
+
+  Las mermas y los ajustes NO se suman a los totales de venta.
+
+
+7. COMPATIBILIDAD
+-----------------
+- Reportes de días anteriores: sin cambios, el lector actual los lee.
+- Días sin mermas ni ajustes: QR idéntico al formato previo.
+- Verificación del código en Historial: igual que antes (solo ventas).
+- Los ajustes hechos antes de esta versión no tienen usuario registrado;
+  eso no afecta al QR (el QR no incluye el usuario de cada ajuste).
+
+
+8. CAPACIDAD DEL QR (estimación medida con datos reales)
+--------------------------------------------------------
+Medido con las 254 ventas reales del sistema (61 días), armando el QR
+igual que el servidor (nivel de corrección L, versión máxima 40,
+4296 caracteres alfanuméricos):
+
+  Promedio por venta en el QR ......... 22 caracteres
+  Venta más larga registrada .......... 53 caracteres
+  Ventas por día hoy .................. promedio 4.2, máximo 16
+
+  Límite técnico de ventas por día:
+    sin mermas ni ajustes ............. ~195 ventas
+    con 3 mermas y 10 ajustes ......... ~187 ventas
+    con 10 mermas y 30 ajustes ........ ~173 ventas
+  Cada merma o ajuste ocupa ~11-12 caracteres = ~media venta.
+
+  Tamaño del QR según ventas (con 3 mermas y 10 ajustes):
+     20 ventas ->  750 caracteres, versión 15  (fácil de escanear)
+     50 ventas -> 1371 caracteres, versión 22
+     80 ventas -> 1966 caracteres, versión 26
+    120 ventas -> 2831 caracteres, versión 32  (denso)
+    160 ventas -> 3680 caracteres, versión 37  (muy denso)
+
+  Límite práctico: desde la versión ~30 (unas 100-110 ventas) el QR es
+  muy denso, y escanearlo desde una captura de pantalla puede fallar
+  según la cámara y la resolución. Conviene probarlo antes de llegar ahí.
+
+  Si se supera el límite técnico, el botón "Acabar el día" da error y
+  no genera el QR. Esto ya pasaba antes de los cambios. Las mermas y los
+  ajustes solo bajan el límite en unas 10-20 ventas en un día normal.

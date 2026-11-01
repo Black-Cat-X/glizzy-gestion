@@ -1,5 +1,5 @@
 -- =============================================================
--- Glizzy Gestión — RPC Fase 2: guardar_venta
+-- Glizzy Gestión — RPC Fase 2: guardar_venta (v2: mermas y ajustes del QR)
 -- Ejecutar en Supabase > SQL Editor
 -- =============================================================
 
@@ -21,15 +21,22 @@ CREATE OR REPLACE FUNCTION guardar_venta(
   p_total             INT,
   p_cuadra            BOOLEAN,
   p_payload           TEXT,
-  p_ventas            JSONB
+  p_ventas            JSONB,
+  p_mermas            JSONB  DEFAULT '{"perros":0,"snack_to":0,"snack_do":0,"insumos":[]}'::jsonb,
+  p_ajustes           JSONB  DEFAULT '[]'::jsonb
 )
 RETURNS VOID
 LANGUAGE plpgsql
 AS $$
 DECLARE
-  v_venta   RECORD;
-  v_insumo  RECORD;
-  v_cant    INT;
+  v_venta      RECORD;
+  v_insumo     RECORD;
+  v_cant       NUMERIC;
+  v_m_perros   NUMERIC;
+  v_m_snack_to NUMERIC;
+  v_m_snack_do NUMERIC;
+  v_elemento   RECORD;
+  v_a_cant     NUMERIC;
 BEGIN
   -- Evitar duplicados
   IF EXISTS (SELECT 1 FROM reportes_venta WHERE fecha = p_fecha) THEN
@@ -66,7 +73,7 @@ BEGIN
     );
   END LOOP;
 
-  -- 3. Movimientos de stock (descuento automático por insumo)
+  -- 3. Movimientos de stock por ventas (descuento automático por receta)
   --    La gaseosa de combo se descuenta aquí: combos + gaseosas_sueltas
   FOR v_insumo IN
     SELECT id, nombre FROM insumos WHERE descuento_auto = true AND activo = true
@@ -91,10 +98,63 @@ BEGIN
       VALUES (p_fecha, v_insumo.id, 'venta', -v_cant, p_fecha);
     END IF;
   END LOOP;
+
+  -- 4. Movimientos de stock por mermas del QR (tipo 'perdida')
+  v_m_perros   := COALESCE((p_mermas->>'perros')::NUMERIC,   0);
+  v_m_snack_to := COALESCE((p_mermas->>'snack_to')::NUMERIC, 0);
+  v_m_snack_do := COALESCE((p_mermas->>'snack_do')::NUMERIC, 0);
+
+  IF v_m_perros > 0 OR v_m_snack_to > 0 OR v_m_snack_do > 0 THEN
+    FOR v_insumo IN
+      SELECT id, nombre FROM insumos WHERE descuento_auto = true AND activo = true
+    LOOP
+      v_cant := CASE v_insumo.nombre
+        WHEN 'Pan'       THEN v_m_perros
+        WHEN 'Salchicha' THEN v_m_perros
+        WHEN 'Queso'     THEN v_m_perros + v_m_snack_to + v_m_snack_do
+        WHEN 'Empaque'   THEN v_m_perros
+        WHEN 'Birria'    THEN v_m_snack_to + v_m_snack_do
+        WHEN 'Tostacos'  THEN v_m_snack_to
+        WHEN 'Doritos'   THEN v_m_snack_do
+        ELSE 0
+      END;
+
+      IF v_cant > 0 THEN
+        INSERT INTO movimientos_stock (fecha, insumo_id, tipo, cantidad, fecha_reporte)
+        VALUES (p_fecha, v_insumo.id, 'perdida', -v_cant, p_fecha);
+      END IF;
+    END LOOP;
+  END IF;
+
+  -- Mermas directas por insumo_id (I: en el QR)
+  FOR v_elemento IN SELECT value FROM jsonb_array_elements(p_mermas->'insumos') LOOP
+    INSERT INTO movimientos_stock (fecha, insumo_id, tipo, cantidad, fecha_reporte)
+    VALUES (
+      p_fecha,
+      (v_elemento.value->>'id')::INT,
+      'perdida',
+      -((v_elemento.value->>'cant')::NUMERIC),
+      p_fecha
+    );
+  END LOOP;
+
+  -- 5. Ajustes manuales del QR (A: en el QR)
+  --    CANT positiva → 'agregar' · CANT negativa → 'gasto'
+  FOR v_elemento IN SELECT value FROM jsonb_array_elements(p_ajustes) LOOP
+    v_a_cant := (v_elemento.value->>'cant')::NUMERIC;
+    INSERT INTO movimientos_stock (fecha, insumo_id, tipo, cantidad, fecha_reporte)
+    VALUES (
+      p_fecha,
+      (v_elemento.value->>'insumo_id')::INT,
+      CASE WHEN v_a_cant > 0 THEN 'agregar' ELSE 'gasto' END,
+      v_a_cant,
+      p_fecha
+    );
+  END LOOP;
 END;
 $$;
 
 -- Permitir que usuarios autenticados llamen la función
 GRANT EXECUTE ON FUNCTION guardar_venta(
-  DATE, TEXT, TEXT, INT, INT, INT, INT, INT, INT, INT, INT, INT, INT, INT, INT, BOOLEAN, TEXT, JSONB
+  DATE, TEXT, TEXT, INT, INT, INT, INT, INT, INT, INT, INT, INT, INT, INT, INT, BOOLEAN, TEXT, JSONB, JSONB, JSONB
 ) TO authenticated;
